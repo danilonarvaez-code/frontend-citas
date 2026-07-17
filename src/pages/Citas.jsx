@@ -1,290 +1,208 @@
+
 import React, { useState, useEffect } from 'react';
-import { citaService } from '../services/citaService';
+import axios from 'axios';
 
-export const Citas = () => {
+const Citas = () => {
+  // 1. Estado inicial ajustado para coincidir con tu Backend en Java
+  const [formData, setFormData] = useState({ 
+    fechaHora: '', 
+    especialidad: '', 
+    usuarioId: '' 
+  });
+
   const [citas, setCitas] = useState([]);
-  const [usuarios, setUsuarios] = useState([]); 
-  const [formData, setFormData] = useState({ fecha: '', descripcion: '', usuarioId: '' });
-  const [errores, setErrores] = useState({});
+  const [usuarios, setUsuarios] = useState([]); // Para cargar la lista en el select
   const [editId, setEditId] = useState(null);
+  const [error, setError] = useState('');
 
+  // URL correcta apuntando al Backend con '/api'
+  const API_URL = 'http://localhost:8080/api/citas';
+  const API_USUARIOS_URL = 'http://localhost:8080/api/usuarios';
+
+  // Cargar citas y usuarios al montar el componente
   useEffect(() => {
-    listarCitas();
-    cargarUsuarios();
+    obtenerCitas();
+    obtenerUsuarios();
   }, []);
 
-  const listarCitas = async () => {
+  const obtenerCitas = async () => {
     try {
-      const response = await citaService.getAll();
-      setCitas(response.data || []);
-    } catch (error) {
-      console.error("Error al cargar las citas:", error);
+      const response = await axios.get(API_URL);
+      setCitas(response.data);
+    } catch (err) {
+      console.error("Error al obtener citas:", err);
+      setError("No se pudieron cargar las citas.");
     }
   };
 
-  const cargarUsuarios = async () => {
+  const obtenerUsuarios = async () => {
     try {
-      const response = await fetch('http://localhost:8080/usuarios');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const response = await axios.get(API_USUARIOS_URL);
+      setUsuarios(response.data);
+    } catch (err) {
+      console.error("Error al obtener usuarios para las citas:", err);
+    }
+  };
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  // 3. Ajusta el mapeo en handleEditar leyendo correctamente la estructura de la base de datos
+  const handleEditar = (cita) => {
+    setEditId(cita.id);
+    setFormData({
+      fechaHora: cita.fechaHora || '',
+      especialidad: cita.especialidad || '',
+      usuarioId: cita.usuario ? cita.usuario.id : '' // Extrae el ID del objeto usuario de Java
+    });
+  };
+
+  const handleEliminar = async (id) => {
+    if (window.confirm("¿Seguro que deseas cancelar esta cita?")) {
+      try {
+        await axios.delete(`${API_URL}/${id}`);
+        obtenerCitas();
+      } catch (err) {
+        console.error("Error al eliminar cita:", err);
+        setError("Error al intentar eliminar la cita.");
       }
-      const data = await response.json();
-      setUsuarios(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Error al cargar usuarios para el selector:", error);
     }
   };
 
-  const validarFormulario = () => {
-    let camposErrores = {};
-    if (!formData.usuarioId) camposErrores.usuarioId = "Debe seleccionar un usuario.";
-    if (!formData.descripcion.trim()) camposErrores.descripcion = "La descripción es obligatoria.";
-    if (!formData.fecha) camposErrores.fecha = "La fecha es obligatoria.";
-    
-    setErrores(camposErrores);
-    return Object.keys(camposErrores).length === 0;
-  };
-
+  // 2. Ajusta el envío de datos en handleSubmit
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validarFormulario()) return;
+    setError('');
 
+    if (!formData.fechaHora || !formData.especialidad || !formData.usuarioId) {
+      setError("Por favor, rellena todos los campos.");
+      return;
+    }
+
+    // Estructuramos el JSON exactamente como lo espera Spring Boot
     const datosAEnviar = {
-      fecha: formData.fecha,
-      descripcion: formData.descripcion,
-      usuario: {
-        id: parseInt(formData.usuarioId)
-      }
+      fechaHora: formData.fechaHora, // Coincide con LocalDateTime en Java
+      especialidad: formData.especialidad, // Coincide con el String en Java
+      usuario: { id: parseInt(formData.usuarioId) } // Pasa la relación como objeto
     };
 
     try {
       if (editId) {
-        await citaService.update(editId, datosAEnviar);
-        alert("¡Cita reprogramada con éxito!");
+        // Petición PUT para actualizar la cita existente
+        await axios.put(`${API_URL}/${editId}`, datosAEnviar);
+        setEditId(null);
       } else {
-        await citaService.create(datosAEnviar);
-        alert("¡Cita agendada con éxito!");
+        // Petición POST para guardar una nueva cita
+        await axios.post(API_URL, datosAEnviar);
       }
-      resetearFormulario();
-      listarCitas();
-    } catch (error) {
-      console.error("Error al procesar la cita:", error);
-      alert("Hubo un problema al guardar la cita.");
+
+      // CORREGIDO: Limpiar formulario usando 'especialidad' en español
+      setFormData({ fechaHora: '', especialidad: '', usuarioId: '' });
+      obtenerCitas();
+    } catch (err) {
+      console.error("Error al guardar la cita:", err);
+      setError("Ocurrió un error en el servidor al procesar la cita.");
     }
-  };
-
-  const handleEliminar = async (id) => {
-    if (window.confirm("¿Estás seguro de cancelar esta cita?")) {
-      try {
-        await citaService.delete(id);
-        listarCitas();
-      } catch (error) {
-        console.error("Error al eliminar la cita:", error);
-      }
-    }
-  };
-
-  const handleEditar = (cita) => {
-    setEditId(cita.id);
-    setFormData({
-      fecha: cita.fecha,
-      descripcion: cita.descripcion,
-      usuarioId: cita.usuario ? cita.usuario.id : ''
-    });
-  };
-
-  const resetearFormulario = () => {
-    setFormData({ fecha: '', descripcion: '', usuarioId: '' });
-    setEditId(null);
-    setErrores({});
   };
 
   return (
-    <div style={{ 
-      padding: '30px', 
-      fontFamily: '"Segoe UI", Roboto, sans-serif', 
-      backgroundColor: '#f8f9fa', 
-      minHeight: '100vh',
-      color: '#333'
-    }}>
-      <h2 style={{ 
-        color: '#1a365d', 
-        marginBottom: '25px', 
-        borderBottom: '2px solid #e2e8f0', 
-        paddingBottom: '10px',
-        fontWeight: '600'
-      }}>
-        Módulo de Gestión de Citas Médicas
-      </h2>
-      
-      {/* Contenedor del Formulario */}
-      <div style={{ 
-        backgroundColor: '#ffffff', 
-        padding: '25px', 
-        borderRadius: '8px', 
-        boxShadow: '0 4px 6px rgba(0,0,0,0.05)', 
-        marginBottom: '40px', 
-        maxWidth: '500px' 
-      }}>
-        <h3 style={{ marginTop: 0, marginBottom: '20px', color: '#2b6cb0', fontSize: '18px' }}>
-          {editId ? '🔄 Reprogramar Cita Médica' : '📅 Agendar Nueva Cita'}
-        </h3>
+    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+      <h2>Agendamiento de Citas - Saludría</h2>
+
+      {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+
+      {/* Formulario de Registro */}
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '30px' }}>
         
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px' }}>
-              Seleccionar Paciente (Usuario):
-            </label>
-            <select 
-              value={formData.usuarioId} 
-              onChange={e => setFormData({...formData, usuarioId: e.target.value})}
-              style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #cbd5e0', backgroundColor: '#fff' }}
-            >
-              <option value="">-- Seleccione un usuario --</option>
-              {usuarios.length > 0 && usuarios.map(user => (
-                <option key={user.id} value={user.id}>
-                  {user.nombre} ({user.email || 'Sin correo'})
-                </option>
-              ))}
-            </select>
-            {errores.usuarioId && <span style={{ color: '#e53e3e', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errores.usuarioId}</span>}
-          </div>
+        <label>Fecha y Hora:</label>
+        <input 
+          type="datetime-local" 
+          name="fechaHora" 
+          value={formData.fechaHora} 
+          onChange={handleChange} 
+          required 
+        />
 
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px' }}>
-              Descripción / Especialidad:
-            </label>
-            <input 
-              type="text" 
-              placeholder="Ej: Odontología, Pediatría..." 
-              value={formData.descripcion} 
-              onChange={e => setFormData({...formData, descripcion: e.target.value})} 
-              style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #cbd5e0', boxSizing: 'border-box' }} 
-            />
-            {errores.descripcion && <span style={{ color: '#e53e3e', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errores.descripcion}</span>}
-          </div>
+        <label>Especialidad Médica:</label>
+        <input 
+          type="text" 
+          name="especialidad" 
+          placeholder="Ej: Odontología, Medicina General" 
+          value={formData.especialidad} // CORREGIDO: Sin duplicación de formData
+          onChange={handleChange} 
+          required 
+        />
 
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px' }}>
-              Fecha de la Cita:
-            </label>
-            <input 
-              type="date" 
-              value={formData.fecha} 
-              onChange={e => setFormData({...formData, fecha: e.target.value})} 
-              style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #cbd5e0', boxSizing: 'border-box' }} 
-            />
-            {errores.fecha && <span style={{ color: '#e53e3e', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errores.fecha}</span>}
-          </div>
+        <label>Seleccionar Paciente (Usuario):</label>
+        <select 
+          name="usuarioId" 
+          value={formData.usuarioId} 
+          onChange={handleChange} 
+          required
+        >
+          <option value="">-- Elija un Paciente --</option>
+          {usuarios.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.nombre} {u.apellido} (Doc: {u.documentoIdentidad})
+            </option>
+          ))}
+        </select>
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-            <button type="submit" style={{ 
-              padding: '10px 20px', 
-              backgroundColor: editId ? '#dd6b20' : '#3182ce', 
-              color: '#fff', 
-              border: 'none', 
-              borderRadius: '5px', 
-              cursor: 'pointer',
-              fontWeight: '600',
-              flex: 1
-            }}>
-              {editId ? 'Actualizar Cita' : 'Confirmar Cita'}
-            </button>
-            {editId && (
-              <button type="button" onClick={resetearFormulario} style={{ 
-                padding: '10px 20px', 
-                backgroundColor: '#e2e8f0', 
-                color: '#4a5568', 
-                border: 'none', 
-                borderRadius: '5px', 
-                cursor: 'pointer' 
-              }}>
-                Cancelar
-              </button>
-            )}
-          </div>
-        </form>
-      </div>
+        <button type="submit" style={{ backgroundColor: '#008CBA', color: 'white', padding: '10px', cursor: 'pointer' }}>
+          {editId ? 'Modificar Cita' : 'Agendar Cita'}
+        </button>
+        {editId && (
+          <button 
+            type="button" 
+            onClick={() => { setEditId(null); setFormData({ fechaHora: '', especialidad: '', usuarioId: '' }); }}
+            style={{ backgroundColor: '#f44336', color: 'white', padding: '10px', cursor: 'pointer' }}
+          >
+            Cancelar Edición
+          </button>
+        )}
+      </form>
 
-      {/* Listado de Citas Card-Table */}
-      <div style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-        <h3 style={{ marginTop: 0, marginBottom: '20px', color: '#1a365d', fontSize: '18px' }}>
-          📋 Historial y Control de Citas Activas
-        </h3>
-        
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#ebf8ff', color: '#2b6cb0', borderBottom: '2px solid #bee3f8' }}>
-              <th style={{ padding: '12px 15px' }}>ID</th>
-              <th style={{ padding: '12px 15px' }}>Paciente / Usuario</th>
-              <th style={{ padding: '12px 15px' }}>Correo Electrónico</th>
-              <th style={{ padding: '12px 15px' }}>Especialidad / Detalles</th>
-              <th style={{ padding: '12px 15px' }}>Fecha Asignada</th>
-              <th style={{ padding: '12px 15px', textAlign: 'center' }}>Acciones</th>
+      {/* Listado de Citas */}
+      <h3>Citas Programadas</h3>
+      <table border="1" cellPadding="10" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ backgroundColor: '#f2f2f2' }}>
+            <th>Fecha y Hora</th>
+            <th>Especialidad</th>
+            <th>Paciente / Documento</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {citas.length === 0 ? (
+            <tr>
+              <td colSpan="4" style={{ textAlign: 'center' }}>No hay citas agendadas.</td>
             </tr>
-          </thead>
-          <tbody>
-            {citas.length === 0 ? (
-              <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#718096', fontStyle: 'italic' }}>
-                  No hay citas médicas registradas en el sistema actualmente.
+          ) : (
+            citas.map((cita) => (
+              <tr key={cita.id}>
+                <td>{cita.fechaHora ? new Date(cita.fechaHora).toLocaleString() : ''}</td>
+                <td>{cita.especialidad}</td>
+                <td>
+                  {cita.usuario 
+                    ? `${cita.usuario.nombre} ${cita.usuario.apellido || ''} (Doc: ${cita.usuario.documentoIdentidad})`
+                    : 'Paciente no asignado'}
+                </td>
+                <td>
+                  <button onClick={() => handleEditar(cita)} style={{ marginRight: '5px', cursor: 'pointer' }}>Editar</button>
+                  <button onClick={() => handleEliminar(cita.id)} style={{ backgroundColor: '#ff9800', color: 'white', cursor: 'pointer' }}>Cancelar</button>
                 </td>
               </tr>
-            ) : (
-              citas.map(cita => (
-                <tr key={cita.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '12px 15px', fontWeight: 'bold', color: '#4a5568' }}>{cita.id}</td>
-                  <td style={{ padding: '12px 15px', color: '#2d3748', fontWeight: '500' }}>
-                    {cita.usuario ? cita.usuario.nombre : '⚠️ No asignado'}
-                  </td>
-                  <td style={{ padding: '12px 15px', color: '#718096' }}>
-                    {cita.usuario ? cita.usuario.email : 'N/A'}
-                  </td>
-                  <td style={{ padding: '12px 15px', color: '#2d3748' }}>
-                    <span style={{ backgroundColor: '#edf2f7', padding: '4px 8px', borderRadius: '4px', fontSize: '13px' }}>
-                      {cita.descripcion}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 15px', color: '#2d3748', fontWeight: '500' }}>{cita.fecha}</td>
-                  <td style={{ padding: '12px 15px', textAlign: 'center' }}>
-                    <button 
-                      onClick={() => handleEditar(cita)} 
-                      style={{ 
-                        marginRight: '8px', 
-                        padding: '6px 12px', 
-                        backgroundColor: '#feebc8', 
-                        color: '#c05621', 
-                        border: 'none', 
-                        borderRadius: '4px', 
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      ✏️ Editar
-                    </button>
-                    <button 
-                      onClick={() => handleEliminar(cita.id)} 
-                      style={{ 
-                        padding: '6px 12px', 
-                        backgroundColor: '#fed7d7', 
-                        color: '#9b2c2c', 
-                        border: 'none', 
-                        borderRadius: '4px', 
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      🗑️ Cancelar
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 };
+
+export default Citas;

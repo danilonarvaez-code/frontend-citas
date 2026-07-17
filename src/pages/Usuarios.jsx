@@ -1,262 +1,193 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-export const Usuarios = () => {
+const Usuarios = () => {
+  // 1. Estado inicial con los nombres exactos de tu Backend en Java
+  const [formData, setFormData] = useState({
+    nombre: '',
+    apellido: '',
+    documentoIdentidad: '', // Coincide con tu entidad de Java
+    telefono: '',
+    correo: '' // Se cambió 'email' por 'correo' para que coincida con Java
+  });
+
   const [usuarios, setUsuarios] = useState([]);
-  const [formData, setFormData] = useState({ nombre: '', email: '', telefono: '' });
-  const [errores, setErrores] = useState({});
   const [editId, setEditId] = useState(null);
+  const [error, setError] = useState('');
 
-  const API_URL = 'http://localhost:8080/usuarios';
+  // URL correcta apuntando al Backend con '/api'
+  const API_URL = 'http://localhost:8080/api/usuarios';
 
+  // Cargar usuarios al montar el componente
   useEffect(() => {
-    listarUsuarios();
+    obtenerUsuarios();
   }, []);
 
-  const listarUsuarios = async () => {
+  const obtenerUsuarios = async () => {
     try {
       const response = await axios.get(API_URL);
-      setUsuarios(response.data || []);
-    } catch (error) {
-      console.error("Error al cargar los usuarios:", error);
+      setUsuarios(response.data);
+    } catch (err) {
+      console.error("Error al obtener usuarios:", err);
+      setError("No se pudieron cargar los usuarios.");
     }
   };
 
-  const validarFormulario = () => {
-    let camposErrores = {};
-    if (!formData.nombre.trim()) camposErrores.nombre = "El nombre completo es obligatorio.";
-    if (!formData.email.trim()) {
-      camposErrores.email = "El correo electrónico es obligatorio.";
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      camposErrores.email = "El formato del correo no es válido.";
-    }
-    if (!formData.telefono.trim()) camposErrores.telefono = "El teléfono de contacto es obligatorio.";
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
 
-    setErrores(camposErrores);
-    return Object.keys(camposErrores).length === 0;
+  // 2. Mapear correctamente los campos que vienen de la Base de Datos al editar
+  const handleEditar = (usuario) => {
+    setEditId(usuario.id);
+    setFormData({
+      nombre: usuario.nombre || '',
+      apellido: usuario.apellido || '',
+      documentoIdentidad: usuario.documentoIdentidad || '',
+      telefono: usuario.telefono || '',
+      correo: usuario.correo || ''
+    });
+  };
+
+  const handleEliminar = async (id) => {
+    if (window.confirm("¿Seguro que deseas eliminar este usuario?")) {
+      try {
+        await axios.delete(`${API_URL}/${id}`);
+        obtenerUsuarios();
+      } catch (err) {
+        console.error("Error al eliminar:", err);
+        setError("Error al intentar eliminar el usuario.");
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validarFormulario()) return;
+    setError('');
+
+    // Validación básica antes de enviar
+    if (!formData.nombre || !formData.documentoIdentidad || !formData.correo) {
+      setError("Por favor, rellena los campos obligatorios (Nombre, Documento y Correo).");
+      return;
+    }
 
     try {
       if (editId) {
+        // Petición PUT para actualizar
         await axios.put(`${API_URL}/${editId}`, formData);
-        alert("Usuario actualizado con éxito.");
+        setEditId(null);
       } else {
+        // Petición POST para guardar nuevo usuario
         await axios.post(API_URL, formData);
-        alert("Usuario registrado con éxito.");
       }
-      resetearFormulario();
-      listarUsuarios();
-    } catch (error) {
-      console.error("Error al procesar el usuario:", error);
-      alert("Hubo un problema al guardar el usuario.");
+      
+      // Limpiar formulario y refrescar lista
+      setFormData({ nombre: '', apellido: '', documentoIdentidad: '', telefono: '', correo: '' });
+      obtenerUsuarios();
+    } catch (err) {
+      console.error("Error al guardar usuario:", err);
+      setError("Ocurrió un error al procesar la solicitud en el servidor.");
     }
-  };
-
-  const handleEliminar = async (id) => {
-    if (window.confirm("¿Estás seguro de eliminar este usuario?")) {
-      try {
-        await axios.delete(`${API_URL}/${id}`);
-        listarUsuarios();
-      } catch (error) {
-        console.error("Error al eliminar el usuario:", error);
-        alert("No se pudo eliminar el usuario.");
-      }
-    }
-  };
-
-  const handleEditar = (usuario) => {
-    setEditId(usuario.id);
-    setFormData({
-      nombre: usuario.nombre,
-      email: usuario.email || '',
-      telefono: usuario.telefono || ''
-    });
-  };
-
-  const resetearFormulario = () => {
-    setFormData({ nombre: '', email: '', telefono: '' });
-    setEditId(null);
-    setErrores({});
   };
 
   return (
-    <div style={{ 
-      padding: '30px', 
-      fontFamily: '"Segoe UI", Roboto, sans-serif', 
-      backgroundColor: '#f8f9fa', 
-      minHeight: '100vh',
-      color: '#333'
-    }}>
-      <h2 style={{ 
-        color: '#2c5282', 
-        marginBottom: '25px', 
-        borderBottom: '2px solid #e2e8f0', 
-        paddingBottom: '10px',
-        fontWeight: '600'
-      }}>
-        Módulo de Gestión de Usuarios / Pacientes
-      </h2>
+    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+      <h2>Gestión de Usuarios - Saludría</h2>
       
-      <div style={{ 
-        backgroundColor: '#ffffff', 
-        padding: '25px', 
-        borderRadius: '8px', 
-        boxShadow: '0 4px 6px rgba(0,0,0,0.05)', 
-        marginBottom: '40px', 
-        maxWidth: '500px' 
-      }}>
-        <h3 style={{ marginTop: 0, marginBottom: '20px', color: '#319795', fontSize: '18px' }}>
-          {editId ? '🔄 Modificar Datos de Usuario' : '👤 Registrar Nuevo Usuario'}
-        </h3>
-        
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px' }}>
-              Nombre Completo:
-            </label>
-            <input 
-              type="text" 
-              placeholder="Ej: Tatiana Gómez" 
-              value={formData.nombre} 
-              onChange={e => setFormData({...formData, nombre: e.target.value})} 
-              style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #cbd5e0', boxSizing: 'border-box' }} 
-            />
-            {errores.nombre && <span style={{ color: '#e53e3e', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errores.nombre}</span>}
-          </div>
+      {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
 
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px' }}>
-              Correo Electrónico:
-            </label>
-            <input 
-              type="email" 
-              placeholder="ejemplo@correo.com" 
-              value={formData.email} 
-              onChange={e => setFormData({...formData, email: e.target.value})} 
-              style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #cbd5e0', boxSizing: 'border-box' }} 
-            />
-            {errores.email && <span style={{ color: '#e53e3e', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errores.email}</span>}
-          </div>
+      {/* Formulario */}
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '30px' }}>
+        <input 
+          type="text" 
+          name="nombre" 
+          placeholder="Nombre" 
+          value={formData.nombre} 
+          onChange={handleChange} 
+          required 
+        />
+        <input 
+          type="text" 
+          name="apellido" 
+          placeholder="Apellido" 
+          value={formData.apellido} 
+          onChange={handleChange} 
+        />
+        <input 
+          type="text" 
+          name="documentoIdentidad" 
+          placeholder="Documento de Identidad" 
+          value={formData.documentoIdentidad} 
+          onChange={handleChange} 
+          required 
+        />
+        <input 
+          type="text" 
+          name="telefono" 
+          placeholder="Teléfono" 
+          value={formData.telefono} 
+          onChange={handleChange} 
+        />
+        <input 
+          type="email" 
+          name="correo" 
+          placeholder="Correo Electrónico" 
+          value={formData.correo} 
+          onChange={handleChange} 
+          required 
+        />
+        <button type="submit" style={{ backgroundColor: '#4CAF50', color: 'white', padding: '10px', cursor: 'pointer' }}>
+          {editId ? 'Actualizar Usuario' : 'Registrar Usuario'}
+        </button>
+        {editId && (
+          <button 
+            type="button" 
+            onClick={() => { setEditId(null); setFormData({ nombre: '', apellido: '', documentoIdentidad: '', telefono: '', correo: '' }); }}
+            style={{ backgroundColor: '#f44336', color: 'white', padding: '10px', cursor: 'pointer' }}
+          >
+            Cancelar Edición
+          </button>
+        )}
+      </form>
 
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px' }}>
-              Teléfono de Contacto:
-            </label>
-            <input 
-              type="text" 
-              placeholder="Ej: 3001234567" 
-              value={formData.telefono} 
-              onChange={e => setFormData({...formData, telefono: e.target.value})} 
-              style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #cbd5e0', boxSizing: 'border-box' }} 
-            />
-            {errores.telefono && <span style={{ color: '#e53e3e', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errores.telefono}</span>}
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-            <button type="submit" style={{ 
-              padding: '10px 20px', 
-              backgroundColor: editId ? '#d69e2e' : '#319795', 
-              color: '#fff', 
-              border: 'none', 
-              borderRadius: '5px', 
-              cursor: 'pointer',
-              fontWeight: '600',
-              flex: 1
-            }}>
-              {editId ? 'Actualizar Usuario' : 'Registrar Usuario'}
-            </button>
-            {editId && (
-              <button type="button" onClick={resetearFormulario} style={{ 
-                padding: '10px 20px', 
-                backgroundColor: '#e2e8f0', 
-                color: '#4a5568', 
-                border: 'none', 
-                borderRadius: '5px', 
-                cursor: 'pointer' 
-              }}>
-                Cancelar
-              </button>
-            )}
-          </div>
-        </form>
-      </div>
-
-      <div style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-        <h3 style={{ marginTop: 0, marginBottom: '20px', color: '#2c5282', fontSize: '18px' }}>
-          📋 Directorio de Usuarios Registrados
-        </h3>
-        
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#e6fffa', color: '#234e52', borderBottom: '2px solid #b2f5ea' }}>
-              <th style={{ padding: '12px 15px' }}>ID</th>
-              <th style={{ padding: '12px 15px' }}>Nombre Completo</th>
-              <th style={{ padding: '12px 15px' }}>Correo Electrónico</th>
-              <th style={{ padding: '12px 15px' }}>Teléfono</th>
-              <th style={{ padding: '12px 15px', textAlign: 'center' }}>Acciones</th>
+      {/* Tabla de Registros */}
+      <h3>Listado de Usuarios</h3>
+      <table border="1" cellPadding="10" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ backgroundColor: '#f2f2f2' }}>
+            <th>Documento</th>
+            <th>Nombre Completo</th>
+            <th>Teléfono</th>
+            <th>Correo</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {usuarios.length === 0 ? (
+            <tr>
+              <td colSpan="5" style={{ textAlign: 'center' }}>No hay usuarios registrados.</td>
             </tr>
-          </thead>
-          <tbody>
-            {usuarios.length === 0 ? (
-              <tr>
-                <td colSpan="5" style={{ textAlign: 'center', padding: '30px', color: '#718096', fontStyle: 'italic' }}>
-                  No hay usuarios registrados en el sistema actualmente.
+          ) : (
+            usuarios.map((usuario) => (
+              <tr key={usuario.id}>
+                <td>{usuario.documentoIdentidad}</td>
+                <td>{`${usuario.nombre} ${usuario.apellido || ''}`}</td>
+                <td>{usuario.telefono || 'N/A'}</td>
+                <td>{usuario.correo}</td>
+                <td>
+                  <button onClick={() => handleEditar(usuario)} style={{ marginRight: '5px', cursor: 'pointer' }}>Editar</button>
+                  <button onClick={() => handleEliminar(usuario.id)} style={{ backgroundColor: '#ff9800', color: 'white', cursor: 'pointer' }}>Eliminar</button>
                 </td>
               </tr>
-            ) : (
-              usuarios.map(user => (
-                <tr key={user.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '12px 15px', fontWeight: 'bold', color: '#4a5568' }}>{user.id}</td>
-                  <td style={{ padding: '12px 15px', color: '#2d3748', fontWeight: '500' }}>{user.nombre}</td>
-                  <td style={{ padding: '12px 15px', color: '#4a5568' }}>{user.email}</td>
-                  <td style={{ padding: '12px 15px', color: '#4a5568' }}>
-                    <span style={{ backgroundColor: '#f7fafc', padding: '4px 8px', borderRadius: '4px', border: '1px solid #edf2f7', fontSize: '13px' }}>
-                      {user.telefono || 'N/A'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 15px', textAlign: 'center' }}>
-                    <button 
-                      onClick={() => handleEditar(user)} 
-                      style={{ 
-                        marginRight: '8px', 
-                        padding: '6px 12px', 
-                        backgroundColor: '#feebc8', 
-                        color: '#c05621', 
-                        border: 'none', 
-                        borderRadius: '4px', 
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      ✏️ Editar
-                    </button>
-                    <button 
-                      onClick={() => handleEliminar(user.id)} 
-                      style={{ 
-                        padding: '6px 12px', 
-                        backgroundColor: '#fed7d7', 
-                        color: '#9b2c2c', 
-                        border: 'none', 
-                        borderRadius: '4px', 
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      🗑️ Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 };
+
+export default Usuarios;

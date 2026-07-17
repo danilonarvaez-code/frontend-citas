@@ -1,5 +1,5 @@
-import { Usuarios } from './pages/Usuarios';
-import { Citas } from './pages/Citas';
+import Usuarios from './pages/Usuarios'; // ⬅️ Se quitaron las llaves
+import Citas from './pages/Citas';       // ⬅️ Se quitaron las llaves
 
 function App() {
   return (

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // URL de tu controlador de Citas en Spring Boot
-const API_URL = 'http://localhost:8080/citas'; 
+const API_URL = 'http://localhost:8080/api/citas'; //  Corregido
 
 export const citaService = {
   // GET - Listar todas las citas

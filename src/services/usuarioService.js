@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Cambiamos la URL a la ruta directa que sí te funcionó:
-const API_URL = 'http://localhost:8080/usuarios'; 
+const API_URL = 'http://localhost:8080/api/usuarios'; //  Corregido
 
 export const usuarioService = {
   // GET - Listar todos
